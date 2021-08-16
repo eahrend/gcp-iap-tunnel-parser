@@ -114,6 +114,7 @@ func main() {
 					return
 				}
 				tag, data, err := extractSubProtocolTag(message)
+				fmt.Println(data)
 				if err != nil {
 					panic(err)
 				}
