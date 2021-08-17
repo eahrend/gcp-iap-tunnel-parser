@@ -32,8 +32,37 @@ const (
 	MessageAck
 )
 
+func NewIAPMessage(data []byte) *IAPMessage {
+	iapmsg := &IAPMessage{
+		data: data,
+	}
+	return iapmsg
+}
+
+func (msg *IAPMessage) AsConnectSIDMessage() *IAPSidMessage {
+	iapsidmsg := NewIAPSIDMessage(msg.data)
+	return iapsidmsg
+}
+
+func (msg *IAPMessage) AsDataMessage() *IAPDataMessage {
+	iapdatamsg := NewIAPDataMessage(msg.data)
+	return iapdatamsg
+}
+
 func (msg *IAPMessage) PeekMessageTag() MessageTag {
 	return getTag(msg.data, 0)
+}
+
+// GetMessageFromTag probably doesn't work as nicely as I'd like it to.
+// the client calling it will need to figure out what to do.
+func (msg *IAPMessage) GetMessageFromTag() (IAPMessageInterface, error) {
+	tag := msg.PeekMessageTag()
+	switch msgTag := tag; {
+	case msgTag == MessageConnectSuccessSid:
+		iapsidmsg := NewIAPSIDMessage(msg.data)
+		return iapsidmsg, nil
+	}
+	return nil, errors.New(fmt.Sprintf("failed to get message tag: %d", tag))
 }
 
 func (msg *IAPMessage) ToString() string {
@@ -118,7 +147,7 @@ func (msg *IAPDataMessage) GetBufferLength() int {
 }
 
 func (msg *IAPDataMessage) ToString() string {
-	return fmt.Sprintf("Seq: %v, Len: %v, ExpAck: %v", msg.sequenceNumber, msg.dataLength, msg.GetExpectedAck())
+	return fmt.Sprintf("Seq: %v, Len: %v, ExpAck: %v, Data: %s \r\n", msg.sequenceNumber, msg.dataLength, msg.GetExpectedAck(), string(msg.data))
 }
 
 type IAPSidMessage struct {
@@ -141,7 +170,6 @@ func NewIAPSIDMessage(data []byte) *IAPSidMessage {
 	}
 	return iapsid
 }
-
 func (msg *IAPSidMessage) GetTag() MessageTag {
 	return getTag(msg.data, 0)
 }
@@ -214,6 +242,8 @@ func (msg *IAPAckMessage) GetTag() MessageTag {
 	return getTag(msg.data, 0)
 }
 func (msg *IAPAckMessage) SetTag(tag MessageTag) {
+	newData := encodeUint16(uint16(tag), msg.data, 0)
+	msg.data = newData
 	msg.tag = tag
 }
 

@@ -4,6 +4,12 @@ func decodeUint16(data []byte, offset int) uint16 {
 	return uint16(data[offset]<<8) | uint16(data[offset+1])
 }
 
+func encodeUint16(value uint16, data []byte, offset int) []byte {
+	data[offset] = (byte)(value >> 8)
+	data[offset+1] = (byte)(value)
+	return data
+}
+
 func decodeUint32(data []byte, offset int) uint32 {
 	return uint32(
 		uint32(data[offset+0]<<24) |

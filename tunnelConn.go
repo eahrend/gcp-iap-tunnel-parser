@@ -16,7 +16,8 @@ import (
 // machine and the IAP
 type TunnelConnection struct {
 	websocketConn *websocket.Conn
-	bytesAcked    int
+	bytesAcked    uint32
+	bytesReceived uint32
 	connected     bool
 	sid           string
 	project       string
@@ -51,7 +52,7 @@ func NewTunnelConnection(ctx context.Context, opts ...TunnelConnectionOption) (*
 	if tc.nic == "" {
 		tc.nic = defaultNetworkInterface
 	}
-	computeService, err := compute.NewService(context.Background(), nil)
+	computeService, err := compute.NewService(context.Background())
 	if err != nil {
 		return nil, err
 	}
@@ -114,6 +115,14 @@ func NewTunnelConnection(ctx context.Context, opts ...TunnelConnectionOption) (*
 	return tc, nil
 }
 
+func (tc *TunnelConnection) GetSid() string {
+	return tc.sid
+}
+
+func (tc *TunnelConnection) SetSid(sid string) {
+	tc.sid = sid
+}
+
 func WithProject(project string) TunnelConnectionOption {
 	return func(tc *TunnelConnection) {
 		tc.project = project
@@ -145,6 +154,40 @@ func WithNic(nic string) TunnelConnectionOption {
 }
 
 // Run starts reading/writing from/to the connection
-func (tc *TunnelConnection) Run() {
-
+// for now, just implementing read cause it's easy
+func (tc *TunnelConnection) Run() error {
+	for {
+		_, msg, err := tc.websocketConn.ReadMessage()
+		if err != nil {
+			panic(err)
+		}
+		iapmsg := NewIAPMessage(msg)
+		tag := iapmsg.PeekMessageTag()
+		switch msgTag := tag; msgTag {
+		case MessageConnectSuccessSid:
+			newMsg := iapmsg.AsConnectSIDMessage()
+			tc.sid = newMsg.GetSID()
+			fmt.Printf("Got SID: %s", tc.sid)
+			continue
+		case MessageData:
+			fmt.Println("Got Data Message")
+			newMsg := iapmsg.AsDataMessage()
+			tc.bytesReceived += newMsg.GetDataLength()
+			fmt.Printf("Total Bytes Received: %d", tc.bytesReceived)
+			// send message to other pipe
+			// send ack message
+			ackBytes := make([]byte, 10)
+			ackMsg := NewIAPAckMessage(ackBytes)
+			ackMsg.SetTag(MessageAck)
+			ackMsg.SetAck(uint64(tc.bytesReceived))
+			err = tc.websocketConn.WriteMessage(websocket.BinaryMessage, ackMsg.data)
+			if err != nil {
+				return err
+			}
+			tc.bytesAcked += tc.bytesReceived
+			continue
+		default:
+			return errors.New(fmt.Sprintf("unknown tag: %d", msgTag))
+		}
+	}
 }

@@ -69,7 +69,7 @@ type AckFrame struct {
 
 // Q is uint64
 // H is uint16
-func sendAck(bytesReceived int) []byte {
+func sendAck(bytesReceived int) ([]byte, error) {
 	af := AckFrame{
 		Tag:      7,
 		Received: uint64(bytesReceived),
@@ -77,10 +77,9 @@ func sendAck(bytesReceived int) []byte {
 	buf := &bytes.Buffer{}
 	err := binary.Write(buf, binary.BigEndian, af)
 	if err != nil {
-		panic(err)
+		return nil, err
 	}
-	fmt.Printf("% x\n", buf)
-	return buf.Bytes()
+	return buf.Bytes(), nil
 }
 
 //CreateSubprotocolDataFrame
