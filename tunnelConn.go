@@ -7,6 +7,7 @@ import (
 	"github.com/gorilla/websocket"
 	"golang.org/x/oauth2/google"
 	"google.golang.org/api/compute/v1"
+	"io"
 	"net/http"
 	"net/url"
 	"strings"
@@ -16,6 +17,8 @@ import (
 // machine and the IAP
 type TunnelConnection struct {
 	websocketConn *websocket.Conn
+	reader        io.Reader
+	writer        io.Writer
 	bytesAcked    uint32
 	bytesReceived uint32
 	connected     bool
@@ -115,6 +118,14 @@ func NewTunnelConnection(ctx context.Context, opts ...TunnelConnectionOption) (*
 	return tc, nil
 }
 
+func (tc *TunnelConnection) Read(p []byte) (n int, err error) {
+	return 0, nil
+}
+
+func (tc *TunnelConnection) Write(b []byte) (n int, err error) {
+	return 0, nil
+}
+
 func (tc *TunnelConnection) GetSid() string {
 	return tc.sid
 }
@@ -126,6 +137,18 @@ func (tc *TunnelConnection) SetSid(sid string) {
 func WithProject(project string) TunnelConnectionOption {
 	return func(tc *TunnelConnection) {
 		tc.project = project
+	}
+}
+
+func WithTunnelReader(reader io.Reader) TunnelConnectionOption {
+	return func(tc *TunnelConnection) {
+		tc.reader = reader
+	}
+}
+
+func WithTunnelWriter(writer io.Writer) TunnelConnectionOption {
+	return func(tc *TunnelConnection) {
+		tc.writer = writer
 	}
 }
 
@@ -153,8 +176,7 @@ func WithNic(nic string) TunnelConnectionOption {
 	}
 }
 
-// Run starts reading/writing from/to the connection
-// for now, just implementing read cause it's easy
+// deprecate this in favor of reader/writer interface
 func (tc *TunnelConnection) Run() error {
 	for {
 		_, msg, err := tc.websocketConn.ReadMessage()
