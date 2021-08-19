@@ -10,6 +10,7 @@ import (
 // LocalConn represents a local tcp connection
 type LocalConn struct {
 	conn          net.Conn
+	localListener net.Listener
 	port          string
 	bytesReceived uint32
 	bytesSent     uint32
@@ -32,11 +33,7 @@ func NewLocalConn(ctx context.Context, opts ...LocalConnOption) (*LocalConn, err
 	if err != nil {
 		return nil, err
 	}
-	conn, err := localListener.Accept()
-	if err != nil {
-		return nil, err
-	}
-	lc.conn = conn
+	lc.localListener = localListener
 	return lc, nil
 }
 
@@ -58,8 +55,20 @@ func WithLocalConnReader(reader io.Reader) LocalConnOption {
 	}
 }
 
+// Accept is blocking, only start accepting once we can confirm that
+// the websocket connection is valid
+func (lc *LocalConn) Accept() error {
+	c, err := lc.localListener.Accept()
+	lc.conn = c
+	return err
+}
+
 func (lc *LocalConn) Read(buf []byte) (n int, err error) {
-	return lc.conn.Read(buf)
+	n, err = lc.conn.Read(buf)
+	if err == io.EOF {
+		panic("Received EOF")
+	}
+	return n, err
 }
 
 func (lc *LocalConn) Write(buf []byte) (n int, err error) {

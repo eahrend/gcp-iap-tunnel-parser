@@ -103,7 +103,5 @@ func createSubprotocolDataFrame(data []byte) []byte {
 	if err != nil {
 		panic(err)
 	}
-	fmt.Printf("% x\n", buf)
-
 	return buf.Bytes()
 }

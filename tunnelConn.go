@@ -119,11 +119,20 @@ func NewTunnelConnection(ctx context.Context, opts ...TunnelConnectionOption) (*
 }
 
 func (tc *TunnelConnection) Read(p []byte) (n int, err error) {
-	return 0, nil
+	_, msg, err := tc.websocketConn.ReadMessage()
+	if err != nil {
+		return 0, err
+	}
+	bytesRead := len(msg)
+	for k, v := range msg {
+		p[k] = v
+	}
+	return bytesRead, nil
 }
 
 func (tc *TunnelConnection) Write(b []byte) (n int, err error) {
-	return 0, nil
+	err = tc.websocketConn.WriteMessage(websocket.BinaryMessage, b)
+	return len(b), err
 }
 
 func (tc *TunnelConnection) GetSid() string {
@@ -173,43 +182,5 @@ func WithPort(port string) TunnelConnectionOption {
 func WithNic(nic string) TunnelConnectionOption {
 	return func(tc *TunnelConnection) {
 		tc.nic = nic
-	}
-}
-
-// deprecate this in favor of reader/writer interface
-func (tc *TunnelConnection) Run() error {
-	for {
-		_, msg, err := tc.websocketConn.ReadMessage()
-		if err != nil {
-			panic(err)
-		}
-		iapmsg := NewIAPMessage(msg)
-		tag := iapmsg.PeekMessageTag()
-		switch msgTag := tag; msgTag {
-		case MessageConnectSuccessSid:
-			newMsg := iapmsg.AsConnectSIDMessage()
-			tc.sid = newMsg.GetSID()
-			fmt.Printf("Got SID: %s", tc.sid)
-			continue
-		case MessageData:
-			fmt.Println("Got Data Message")
-			newMsg := iapmsg.AsDataMessage()
-			tc.bytesReceived += newMsg.GetDataLength()
-			fmt.Printf("Total Bytes Received: %d", tc.bytesReceived)
-			// send message to other pipe
-			// send ack message
-			ackBytes := make([]byte, 10)
-			ackMsg := NewIAPAckMessage(ackBytes)
-			ackMsg.SetTag(MessageAck)
-			ackMsg.SetAck(uint64(tc.bytesReceived))
-			err = tc.websocketConn.WriteMessage(websocket.BinaryMessage, ackMsg.data)
-			if err != nil {
-				return err
-			}
-			tc.bytesAcked += tc.bytesReceived
-			continue
-		default:
-			return errors.New(fmt.Sprintf("unknown tag: %d", msgTag))
-		}
 	}
 }

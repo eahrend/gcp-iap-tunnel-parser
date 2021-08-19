@@ -1,7 +1,9 @@
 package main
 
 func decodeUint16(data []byte, offset int) uint16 {
-	return uint16(data[offset]<<8) | uint16(data[offset+1])
+	return uint16(
+		data[offset]<<8 |
+			data[offset+1])
 }
 
 func encodeUint16(value uint16, data []byte, offset int) []byte {
@@ -12,10 +14,10 @@ func encodeUint16(value uint16, data []byte, offset int) []byte {
 
 func decodeUint32(data []byte, offset int) uint32 {
 	return uint32(
-		uint32(data[offset+0]<<24) |
-			uint32(data[offset+1]<<16) |
-			uint32(data[offset+2]<<8) |
-			uint32(data[offset+3]))
+		data[offset+0]<<24 |
+			data[offset+1]<<16 |
+			data[offset+2]<<8 |
+			data[offset+3])
 }
 
 func encodeUint32(value uint32, data []byte, offset int) []byte {

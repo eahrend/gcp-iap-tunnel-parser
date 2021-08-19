@@ -138,7 +138,12 @@ func (msg *IAPDataMessage) SetDataLength(value uint32) error {
 		return errors.New("value out of range")
 	}
 	newData := encodeUint32(value, msg.data, 2)
-	msg.dataLength = uint32(len(newData))
+	msg.data = newData
+	return nil
+}
+
+func (msg *IAPDataMessage) CreateDataFrame() error {
+	msg.data = createSubprotocolDataFrame(msg.data)
 	return nil
 }
 
