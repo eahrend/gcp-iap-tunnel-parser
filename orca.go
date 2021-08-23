@@ -8,13 +8,16 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 )
 
 // Orca handles the communication between the
 // local port and the proxy port
 type Orca struct {
-	tunnelConn *TunnelConnection
-	localConn  *LocalConn
+	tunnelConn          *TunnelConnection
+	localConn           *LocalConn
+	queuedDataToSend    []byte
+	queuedDataToReceive []byte
 }
 
 func NewOrca(ctx context.Context) (*Orca, error) {
@@ -47,31 +50,33 @@ func NewOrca(ctx context.Context) (*Orca, error) {
 }
 
 func (orca *Orca) Run() error {
+	ctx := context.Background()
 	c := make(chan os.Signal)
 	signal.Notify(c, os.Interrupt, syscall.SIGTERM)
 	// going off of max size from the python library
 	localbuf := make([]byte, 16384)
 	socketbuf := make([]byte, 16384)
-	fmt.Println("Listening on port 4000")
+	fmt.Printf("Listening on port %s", orca.localConn.port)
 	err := orca.localConn.Accept()
 	if err != nil {
 		return err
 	}
 	fmt.Println("Client connected")
 	go func() {
+		for !orca.tunnelConn.connected {
+			time.Sleep(1 * time.Second)
+		}
 		for {
 			n, err := orca.localConn.Read(localbuf)
 			if err != nil {
 				panic(err)
 			}
 			msg := localbuf[:n]
-			fmt.Println("Sending data back", msg)
 			newMsg := NewIAPDataMessage(msg)
 			err = newMsg.CreateDataFrame()
 			if err != nil {
 				panic(err)
 			}
-			fmt.Println("Modified Data:", newMsg.data)
 			_, err = orca.tunnelConn.Write(newMsg.data)
 			if err != nil {
 				panic(err)
@@ -79,6 +84,10 @@ func (orca *Orca) Run() error {
 		}
 	}()
 	go func() {
+		err := orca.tunnelConn.Connect(ctx)
+		if err != nil {
+			panic(err)
+		}
 		for {
 			n, err := orca.tunnelConn.Read(socketbuf)
 			if err != nil {
@@ -100,6 +109,7 @@ func (orca *Orca) Run() error {
 				fmt.Println("Got Data Message")
 				newMsg := msg.AsDataMessage()
 				orca.tunnelConn.bytesReceived += newMsg.GetDataLength()
+
 				ackBytes := make([]byte, 10)
 				ackMsg := NewIAPAckMessage(ackBytes)
 				ackMsg.SetTag(MessageAck)
@@ -116,10 +126,12 @@ func (orca *Orca) Run() error {
 				continue
 			default:
 				fmt.Printf("Unknown tag: %d", tag)
+				panic("unkown tag")
 				break
 			}
 		}
 	}()
+
 	<-c
 	return nil
 }

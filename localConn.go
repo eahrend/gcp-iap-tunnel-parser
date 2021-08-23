@@ -27,9 +27,10 @@ func NewLocalConn(ctx context.Context, opts ...LocalConnOption) (*LocalConn, err
 	for _, opt := range opts {
 		opt(lc)
 	}
+	// for testing
 	// TODO: Add local port checking so you don't need to be explicit about
 	//  what port you're looking for, also _maybe_ add ipv6?
-	localListener, err := net.Listen("tcp4", fmt.Sprintf("127.0.0.1:%s", lc.port))
+	localListener, err := net.Listen("tcp", fmt.Sprintf("127.0.0.1:%s", lc.port))
 	if err != nil {
 		return nil, err
 	}
@@ -64,11 +65,7 @@ func (lc *LocalConn) Accept() error {
 }
 
 func (lc *LocalConn) Read(buf []byte) (n int, err error) {
-	n, err = lc.conn.Read(buf)
-	if err == io.EOF {
-		panic("Received EOF")
-	}
-	return n, err
+	return lc.conn.Read(buf)
 }
 
 func (lc *LocalConn) Write(buf []byte) (n int, err error) {

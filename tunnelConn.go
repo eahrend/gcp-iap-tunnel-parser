@@ -10,6 +10,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 )
 
@@ -46,7 +47,8 @@ const (
 // TunnelConnectionOption acts as a configuration wrapper to our tunnel connection
 type TunnelConnectionOption func(connection *TunnelConnection)
 
-// NewTunnelConnection creates a tunnel connection object
+// NewTunnelConnection creates a tunnel connection object, but doesn't connect to the
+// websocket connection.
 func NewTunnelConnection(ctx context.Context, opts ...TunnelConnectionOption) (*TunnelConnection, error) {
 	tc := &TunnelConnection{}
 	for _, opt := range opts {
@@ -91,31 +93,59 @@ func NewTunnelConnection(ctx context.Context, opts ...TunnelConnectionOption) (*
 	if !instanceVerify {
 		return nil, errors.New("failed to find instance")
 	}
+	return tc, nil
+}
+
+// Connect connects to the websocket, duh.
+func (tc *TunnelConnection) Connect(ctx context.Context) error {
 	// currently it doesn't give me an issue with scopes, in the future
 	// I may want to be explicit
 	scopes := []string{}
 	cred, err := google.FindDefaultCredentials(ctx, scopes...)
 	if err != nil {
-		return nil, err
+		return err
 	}
 	ts, err := cred.TokenSource.Token()
 	// may want to be more variable down the road, but for now this works
 	u := url.URL{Scheme: wssScheme, Host: tlsBaseUri, Path: fmt.Sprintf("/%s/%s", webSocketVersion, connectEndpoint)}
 	q := u.Query()
-	//"project=%s&zone=%s&instance=%s&interface=%s&port=%s", project, zone, instance, interfaceName, port
 	q.Add("project", tc.project)
 	q.Add("zone", tc.zone)
 	q.Add("instance", tc.instanceName)
 	q.Add("interface", tc.nic)
 	q.Add("port", tc.port)
+	if tc.sid != "" {
+		q.Add("sid", tc.sid)
+	}
+	if tc.bytesReceived > tc.bytesAcked {
+		q.Add("ack", strconv.Itoa(int(tc.bytesReceived)))
+	}
 	u.RawQuery = q.Encode()
 	c, _, err := websocket.DefaultDialer.Dial(u.String(), http.Header{
 		"Origin":                 []string{origin},
 		"Sec-Websocket-Protocol": []string{subProtocolName},
 		"Authorization":          []string{fmt.Sprintf("Bearer %s", ts.AccessToken)},
 	})
+	if err != nil {
+		return err
+	}
 	tc.websocketConn = c
-	return tc, nil
+	tc.connected = true
+	return nil
+}
+
+// Close closes the connection
+func (tc *TunnelConnection) Close() error {
+	err := tc.websocketConn.WriteMessage(websocket.CloseMessage, nil)
+	if err != nil {
+		return err
+	}
+	err = tc.websocketConn.Close()
+	if err != nil {
+		return err
+	}
+	tc.websocketConn = nil
+	return nil
 }
 
 func (tc *TunnelConnection) Read(p []byte) (n int, err error) {
